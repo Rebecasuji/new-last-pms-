@@ -393,10 +393,13 @@ export function TaskFilters({
                                                     <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                                                 </Button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="w-[300px] p-0 shadow-xl border-slate-200" align="start">
-                                                <Command>
+                                            <PopoverContent
+                                                className="w-[300px] p-0 shadow-xl border-slate-200 max-h-[min(320px,var(--radix-popover-content-available-height))] flex flex-col"
+                                                align="start"
+                                            >
+                                                <Command className="max-h-full">
                                                     <CommandInput placeholder="Search project..." className="h-9 text-xs" />
-                                                    <CommandList>
+                                                    <CommandList className="max-h-[260px] overflow-y-auto overscroll-contain">
                                                         <CommandEmpty className="py-4 text-xs text-slate-400 text-center">No project found.</CommandEmpty>
                                                         <CommandGroup>
                                                             <CommandItem
@@ -560,7 +563,7 @@ export function TaskFilters({
                                                     <CommandInput placeholder="Search status..." className="h-8 text-[10px]" />
                                                     <CommandList>
                                                         <CommandGroup>
-                                                            {["all", "Not Started", "Planned", "In Progress", "Completed", "On Hold"].map((s) => (
+                                                            {["all", "Not Started", "Planned", "In Progress", "Completed", "On Hold", "Cancelled"].map((s) => (
                                                                 <CommandItem
                                                                     key={s}
                                                                     value={s}

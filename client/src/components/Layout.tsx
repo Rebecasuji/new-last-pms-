@@ -191,22 +191,16 @@ const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Workspace", href: "/workspace", icon: LayoutDashboard, adminOnly: true },
   { label: "Projects", href: "/projects", icon: Folder },
-  { label: "Project Analytics", href: "/project-analytics", icon: BarChart3 },
   { label: "Key Steps", href: "/key-steps", icon: FolderKanban },
   { label: "Tasks", href: "/tasks", icon: CheckCircle2 },
   { label: "Completed", href: "/completed", icon: Archive },
   { label: "Team", href: "/users", icon: UsersIcon },
-  { label: "Site Report", href: "/site-report", icon: FileText },
-  { label: "Delay Reasons", href: "/delay-reasons", icon: Clock },
 
   // 🚧 Under construction items
   { label: "Calendar", href: "/calendar", icon: CalendarIcon },
-  { label: "Overview", href: "/overview", icon: FolderKanban },
   { label: "Discuss", href: "/discussion", icon: MessageSquare },
   { label: "Reports", href: "/reports", icon: BarChart3 },
   { label: "Tickets", href: "/tickets", icon: Ticket },
-  { label: "Performance", href: "/performance", icon: Trophy },
-  { label: "Leaderboard", href: "/leaderboard", icon: Medal },
   { label: "Extensions", href: "/extensions", icon: Blocks },
   { label: "Settings", href: "/settings", icon: Settings, adminOnly: true },
 ];

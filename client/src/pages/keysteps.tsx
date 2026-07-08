@@ -55,7 +55,7 @@ interface KeyStep {
   requirements?: string | null;
 
   phase: number;
-  status: "not started" | "pending" | "in-progress" | "completed";
+  status: "not started" | "pending" | "in-progress" | "completed" | "cancelled";
   startDate?: string | null;
   endDate?: string | null;
   parentKeyStepId?: string | null;
@@ -838,6 +838,8 @@ export default function KeySteps() {
       case "completed": return "bg-green-100 text-green-800 border-green-200";
       case "in progress": return "bg-blue-100 text-blue-800 border-blue-200";
       case "on hold": return "bg-amber-100 text-amber-800 border-amber-200";
+      case "cancelled":
+      case "canceled": return "bg-red-100 text-red-800 border-red-200";
       case "not started": return "bg-slate-100 text-slate-600 border-slate-200";
       default: return "bg-gray-100 text-gray-700 border-gray-200";
     }
@@ -851,6 +853,9 @@ export default function KeySteps() {
         return "bg-blue-100 text-blue-800 border-blue-200";
       case "not started":
         return "bg-slate-100 text-slate-600 border-slate-200";
+      case "cancelled":
+      case "canceled":
+        return "bg-red-100 text-red-800 border-red-200";
       default:
         return "bg-gray-100 text-gray-800 border-gray-200";
     }
@@ -1007,6 +1012,7 @@ export default function KeySteps() {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="not started">Not Started</SelectItem>
                 </SelectContent>
               </Select>
@@ -1186,6 +1192,7 @@ export default function KeySteps() {
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="in-progress">In Progress</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

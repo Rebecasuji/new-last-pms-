@@ -260,6 +260,40 @@ export default function AddEditTask() {
 
   const filteredEmployees = selectedDepartment === "all" ? employees : employees.filter(e => e.department === selectedDepartment);
 
+  // When the department filter changes, drop any already-selected assignees
+  // (task members) and subtask assignees that no longer belong to the
+  // newly selected department. "All Departments" never invalidates a selection.
+  useEffect(() => {
+    if (selectedDepartment === "all") return;
+
+    const validIds = new Set(
+      employees
+        .filter((e) => e.department === selectedDepartment)
+        .map((e) => String(e.id))
+    );
+
+    setForm((prev) => {
+      const nextTaskMembers = prev.taskMembers.filter((id) => validIds.has(String(id)));
+      if (nextTaskMembers.length === prev.taskMembers.length) return prev;
+      return { ...prev, taskMembers: nextTaskMembers };
+    });
+
+    setSubtasks((prev) => {
+      let changed = false;
+      const next = prev.map((st) => {
+        const currentAssignees = Array.isArray(st.assignedTo) ? st.assignedTo : [];
+        const filteredAssignees = currentAssignees.filter((id: string) => validIds.has(String(id)));
+        if (filteredAssignees.length !== currentAssignees.length) {
+          changed = true;
+          return { ...st, assignedTo: filteredAssignees };
+        }
+        return st;
+      });
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDepartment]);
+
   // Load task data when editing
   useEffect(() => {
     if (!taskId) return;

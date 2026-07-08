@@ -49,7 +49,7 @@ interface KeyStep {
   description?: string | null;
   requirements?: string | null;
   phase: number;
-  status: "pending" | "in-progress" | "completed" | "not started";
+  status: "pending" | "in-progress" | "completed" | "not started" | "cancelled";
   startDate: string;
   endDate: string;
   progress: number;
@@ -464,6 +464,7 @@ export default function KeyStepsFullPage() {
     const s = String(status).toLowerCase();
     if (s === "completed") return "bg-green-100 text-green-800 border-green-200";
     if (s === "in-progress" || s === "in progress") return "bg-blue-100 text-blue-800 border-blue-200";
+    if (s === "cancelled" || s === "canceled") return "bg-red-100 text-red-800 border-red-200";
     if (s === "not started") return "bg-slate-100 text-slate-600 border-slate-200";
     return "bg-amber-100 text-amber-800 border-amber-200";
   };
@@ -480,6 +481,7 @@ export default function KeyStepsFullPage() {
     if (s === "completed") return "bg-green-100 text-green-800 border-green-200";
     if (s === "in progress") return "bg-blue-100 text-blue-800 border-blue-200";
     if (s === "on hold") return "bg-amber-100 text-amber-800 border-amber-200";
+    if (s === "cancelled" || s === "canceled") return "bg-red-100 text-red-800 border-red-200";
     if (s === "not started") return "bg-slate-100 text-slate-600 border-slate-200";
     return "bg-gray-100 text-gray-700 border-gray-200";
   };

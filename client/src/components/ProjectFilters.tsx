@@ -317,7 +317,7 @@ export function ProjectFilters({
                                             <CommandList>
                                                 <CommandEmpty>No status found.</CommandEmpty>
                                                 <CommandGroup>
-                                                    {["Planned", "In Progress", "Completed", "On Hold"].map((s) => (
+                                                    {["Planned", "In Progress", "Completed", "On Hold", "Cancelled"].map((s) => (
                                                         <CommandItem
                                                             key={s}
                                                             onSelect={() => {

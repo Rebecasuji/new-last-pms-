@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import type { Server } from "http";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
-import { eq, inArray, or, desc, aliasedTable, isNull, isNotNull } from "drizzle-orm";
+import { eq, inArray, or, desc, aliasedTable, isNull, isNotNull, ne } from "drizzle-orm";
 import { and, sql } from "drizzle-orm";
 
 import { db, pool } from "./db.ts";
@@ -1955,59 +1955,90 @@ export async function registerRoutes(
 
       console.log("✅ Project update validation passed, updating project:", { id, title });
 
-      const [updated] = await db
-        .update(projects)
-        .set(updateData)
-        .where(eq(projects.id, id))
-        .returning();
+      const updated = await db.transaction(async (tx) => {
+        const [updatedProj] = await tx
+          .update(projects)
+          .set(updateData)
+          .where(eq(projects.id, id))
+          .returning();
+
+        if (!updatedProj) return null;
+
+        // Cascade cancellation logic
+        if (updateData.status === "Cancelled") {
+          console.log(`[Project Cancel] Cancelling non-completed items for project: ${id}`);
+          
+          // 1. Cancel non-completed Key Steps
+          await tx.update(keySteps)
+            .set({ status: 'cancelled' })
+            .where(
+              and(
+                eq(keySteps.projectId, id),
+                ne(keySteps.status, 'completed'),
+                ne(keySteps.status, 'Completed')
+              )
+            );
+
+          // 2. Cancel non-completed Tasks
+          await tx.update(projectTasks)
+            .set({ status: 'Cancelled' })
+            .where(
+              and(
+                eq(projectTasks.projectId, id),
+                ne(projectTasks.status, 'Completed'),
+                ne(projectTasks.status, 'completed')
+              )
+            );
+        }
+
+        // Update related records - ONLY if provided in the request
+        const updateDepartments = req.body.department !== undefined;
+        const updateTeam = req.body.team !== undefined;
+        const updateVendors = req.body.vendors !== undefined;
+
+        if (updateDepartments) {
+          await tx.delete(projectDepartments).where(eq(projectDepartments.projectId, id));
+          const deptArray = Array.isArray(req.body.department) ? req.body.department : [];
+          if (deptArray.length > 0) {
+            await tx.insert(projectDepartments).values(
+              deptArray.filter((d: any) => d?.trim()).map((dept: string) => ({
+                projectId: id,
+                department: normalizeDept(dept),
+              }))
+            );
+          }
+        }
+
+        if (updateTeam) {
+          await tx.delete(projectTeamMembers).where(eq(projectTeamMembers.projectId, id));
+          const teamArray = Array.isArray(req.body.team) ? req.body.team : [];
+          if (teamArray.length > 0) {
+            await tx.insert(projectTeamMembers).values(
+              teamArray.filter((t: any) => t?.trim()).map((empId: string) => ({
+                projectId: id,
+                employeeId: empId,
+              }))
+            );
+          }
+        }
+
+        if (updateVendors) {
+          await tx.delete(projectVendors).where(eq(projectVendors.projectId, id));
+          const vendorsArray = Array.isArray(req.body.vendors) ? req.body.vendors : [];
+          if (vendorsArray.length > 0) {
+            await tx.insert(projectVendors).values(
+              vendorsArray.filter((v: any) => v?.trim()).map((vendor: string) => ({
+                projectId: id,
+                vendorName: vendor,
+              }))
+            );
+          }
+        }
+        
+        return updatedProj;
+      });
 
       if (!updated) return res.status(404).json({ error: "Project not found" });
-
-      // Update related records - ONLY if provided in the request
-      // This prevents accidental wiping of data when performing partial updates (like status changes)
-
-      const updateDepartments = req.body.department !== undefined;
-      const updateTeam = req.body.team !== undefined;
-      const updateVendors = req.body.vendors !== undefined;
-
-      if (updateDepartments) {
-        await db.delete(projectDepartments).where(eq(projectDepartments.projectId, id));
-        const deptArray = Array.isArray(req.body.department) ? req.body.department : [];
-        if (deptArray.length > 0) {
-          await db.insert(projectDepartments).values(
-            deptArray.filter((d: any) => d?.trim()).map((dept: string) => ({
-              projectId: id,
-              department: normalizeDept(dept),
-            }))
-          );
-        }
-      }
-
-      if (updateTeam) {
-        await db.delete(projectTeamMembers).where(eq(projectTeamMembers.projectId, id));
-        const teamArray = Array.isArray(req.body.team) ? req.body.team : [];
-        if (teamArray.length > 0) {
-          await db.insert(projectTeamMembers).values(
-            teamArray.filter((t: any) => t?.trim()).map((empId: string) => ({
-              projectId: id,
-              employeeId: empId,
-            }))
-          );
-        }
-      }
-
-      if (updateVendors) {
-        await db.delete(projectVendors).where(eq(projectVendors.projectId, id));
-        const vendorsArray = Array.isArray(req.body.vendors) ? req.body.vendors : [];
-        if (vendorsArray.length > 0) {
-          await db.insert(projectVendors).values(
-            vendorsArray.filter((v: any) => v?.trim()).map((vendor: string) => ({
-              projectId: id,
-              vendorName: vendor,
-            }))
-          );
-        }
-      }
 
       // --- ADMIN NOTIFICATION LOGIC ---
       // Triggered only when status transitions TO 'Completed'
@@ -2084,46 +2115,75 @@ export async function registerRoutes(
       if (typeof data.company !== 'undefined') updateData.company = data.company;
       if (typeof data.holdReason !== 'undefined' && typeof data.status === 'undefined') updateData.holdReason = data.holdReason;
 
-      if (Object.keys(updateData).length > 1) {
-        await db.update(projects).set(updateData).where(eq(projects.id, id));
-      }
+      await db.transaction(async (tx) => {
+        if (Object.keys(updateData).length > 1) {
+          await tx.update(projects).set(updateData).where(eq(projects.id, id));
+        }
+
+        // Cascade cancellation logic
+        if (updateData.status === "Cancelled") {
+          console.log(`[Project Cancel] Cancelling non-completed items for project: ${id}`);
+          
+          // 1. Cancel non-completed Key Steps
+          await tx.update(keySteps)
+            .set({ status: 'cancelled' })
+            .where(
+              and(
+                eq(keySteps.projectId, id),
+                ne(keySteps.status, 'completed'),
+                ne(keySteps.status, 'Completed')
+              )
+            );
+
+          // 2. Cancel non-completed Tasks
+          await tx.update(projectTasks)
+            .set({ status: 'Cancelled' })
+            .where(
+              and(
+                eq(projectTasks.projectId, id),
+                ne(projectTasks.status, 'Completed'),
+                ne(projectTasks.status, 'completed')
+              )
+            );
+        }
+
+        // Cascading reopen logic
+        const isReopening = (updateData.status && updateData.status !== "Completed" && updateData.status !== "completed" && updateData.status !== "Cancelled") ||
+          (typeof data.progress !== 'undefined' && data.progress < 100);
+
+        if (isReopening) {
+          console.log(`[Project Reopen] Reopening all related items for project: ${id}`);
+          // 1. Reopen all Key Steps
+          await tx.update(keySteps).set({ status: 'in-progress', progress: 0 }).where(eq(keySteps.projectId, id));
+
+          // 2. Reopen all Tasks
+          await tx.update(projectTasks).set({ status: 'pending', progress: 0 }).where(eq(projectTasks.projectId, id));
+
+          // 3. Reopen all Subtasks
+          const taskRows = await tx.select({ id: projectTasks.id }).from(projectTasks).where(eq(projectTasks.projectId, id));
+          if (taskRows.length > 0) {
+            const tIds = taskRows.map(tr => tr.id);
+            await tx.update(subtasks).set({ isCompleted: false, progress: 0 }).where(inArray(subtasks.taskId, tIds));
+          }
+        }
+
+        if (typeof data.department !== 'undefined') {
+          await tx.delete(projectDepartments).where(eq(projectDepartments.projectId, id));
+          const departments = Array.isArray(data.department) ? data.department : [];
+          if (departments.length > 0) {
+            await tx.insert(projectDepartments).values(
+              departments.filter((d: any) => d?.trim()).map((dept: string) => ({
+                projectId: id,
+                department: normalizeDept(dept),
+              }))
+            );
+          }
+        }
+      });
 
       // Trigger admin notification if this is a fresh completion
       if (data.status === "Completed" && !wasAlreadyCompleted) {
         await notifyAdminsOfCompletion(id);
-      }
-
-      // Cascading reopen logic
-      const isReopening = (data.status && data.status !== "Completed" && data.status !== "completed") ||
-        (typeof data.progress !== 'undefined' && data.progress < 100);
-
-      if (isReopening) {
-        console.log(`[Project Reopen] Reopening all related items for project: ${id}`);
-        // 1. Reopen all Key Steps
-        await db.update(keySteps).set({ status: 'in-progress', progress: 0 }).where(eq(keySteps.projectId, id));
-
-        // 2. Reopen all Tasks
-        await db.update(projectTasks).set({ status: 'pending', progress: 0 }).where(eq(projectTasks.projectId, id));
-
-        // 3. Reopen all Subtasks
-        const taskRows = await db.select({ id: projectTasks.id }).from(projectTasks).where(eq(projectTasks.projectId, id));
-        if (taskRows.length > 0) {
-          const tIds = taskRows.map(tr => tr.id);
-          await db.update(subtasks).set({ isCompleted: false, progress: 0 }).where(inArray(subtasks.taskId, tIds));
-        }
-      }
-
-      if (typeof data.department !== 'undefined') {
-        await db.delete(projectDepartments).where(eq(projectDepartments.projectId, id));
-        const departments = Array.isArray(data.department) ? data.department : [];
-        if (departments.length > 0) {
-          await db.insert(projectDepartments).values(
-            departments.filter((d: any) => d?.trim()).map((dept: string) => ({
-              projectId: id,
-              department: normalizeDept(dept),
-            }))
-          );
-        }
       }
 
       res.json({ success: true });
@@ -2526,22 +2586,40 @@ export async function registerRoutes(
       // Get current key step for timestamp check
       const [oldStep] = await db.select().from(keySteps).where(eq(keySteps.id, id));
 
-      const [updated] = await db
-        .update(keySteps)
-        .set({
-          title: title?.trim(),
-          description: description ?? "",
-          requirements: requirements ?? "",
-          header: header ?? "",
-          phase: Number(phase) || 1,
-          status: normalizedStatus,
-          progress: isCompleted ? 100 : (typeof req.body.progress !== 'undefined' ? Number(req.body.progress) : undefined),
-          startDate: startDate ? formatDate(startDate) : undefined,
-          endDate: endDate ? formatDate(endDate) : undefined,
-          completedAt: isCompleted ? (oldStep?.status?.toLowerCase() !== 'completed' ? new Date() : (oldStep?.completedAt || new Date())) : null,
-        })
-        .where(eq(keySteps.id, id))
-        .returning();
+      const updated = await db.transaction(async (tx) => {
+        const [updatedStep] = await tx
+          .update(keySteps)
+          .set({
+            title: title?.trim(),
+            description: description ?? "",
+            requirements: requirements ?? "",
+            header: header ?? "",
+            phase: Number(phase) || 1,
+            status: normalizedStatus,
+            progress: isCompleted ? 100 : (typeof req.body.progress !== 'undefined' ? Number(req.body.progress) : undefined),
+            startDate: startDate ? formatDate(startDate) : undefined,
+            endDate: endDate ? formatDate(endDate) : undefined,
+            completedAt: isCompleted ? (oldStep?.status?.toLowerCase() !== 'completed' ? new Date() : (oldStep?.completedAt || new Date())) : null,
+          })
+          .where(eq(keySteps.id, id))
+          .returning();
+
+        if (updatedStep && normalizedStatus === "cancelled") {
+          console.log(`[KeyStep Cancel] Cancelling non-completed tasks for key step: ${id}`);
+          
+          await tx.update(projectTasks)
+            .set({ status: 'Cancelled' })
+            .where(
+              and(
+                eq(projectTasks.keyStepId, id),
+                ne(projectTasks.status, 'Completed'),
+                ne(projectTasks.status, 'completed')
+              )
+            );
+        }
+        
+        return updatedStep;
+      });
 
       if (updated) {
         await updateParentProgress('keystep', id, req.user?.id);
@@ -2583,33 +2661,52 @@ export async function registerRoutes(
         }
       }
 
-      const [updated] = await db
-        .update(keySteps)
-        .set(updateData)
-        .where(eq(keySteps.id, id))
-        .returning();
+      const updated = await db.transaction(async (tx) => {
+        const [updatedStep] = await tx
+          .update(keySteps)
+          .set(updateData)
+          .where(eq(keySteps.id, id))
+          .returning();
 
-      if (updated) {
-        const isReopening = (updateData.status && String(updateData.status).toLowerCase() !== "completed") ||
-          (typeof updateData.progress !== 'undefined' && updateData.progress < 100);
+        if (updatedStep) {
+          if (updateData.status && String(updateData.status).toLowerCase() === "cancelled") {
+            console.log(`[KeyStep Cancel] Cancelling non-completed tasks for key step: ${id}`);
+            
+            await tx.update(projectTasks)
+              .set({ status: 'Cancelled' })
+              .where(
+                and(
+                  eq(projectTasks.keyStepId, id),
+                  ne(projectTasks.status, 'Completed'),
+                  ne(projectTasks.status, 'completed')
+                )
+              );
+          }
 
-        if (isReopening) {
-          console.log(`[KeyStep Reopen] Reopening tasks and subtasks for key step: ${id}`);
+          const isReopening = (updateData.status && String(updateData.status).toLowerCase() !== "completed" && String(updateData.status).toLowerCase() !== "cancelled") ||
+            (typeof updateData.progress !== 'undefined' && updateData.progress < 100);
 
-          // 1. Reopen all child key steps (if any)
-          await db.update(keySteps).set({ status: 'in-progress', progress: 0 }).where(eq(keySteps.parentKeyStepId, id));
+          if (isReopening) {
+            console.log(`[KeyStep Reopen] Reopening tasks and subtasks for key step: ${id}`);
 
-          // 2. Reopen all tasks under this key step
-          await db.update(projectTasks).set({ status: 'pending', progress: 0 }).where(eq(projectTasks.keyStepId, id));
+            // 1. Reopen all child key steps (if any)
+            await tx.update(keySteps).set({ status: 'in-progress', progress: 0 }).where(eq(keySteps.parentKeyStepId, id));
 
-          // 3. Reopen all subtasks for those tasks
-          const taskRows = await db.select({ id: projectTasks.id }).from(projectTasks).where(eq(projectTasks.keyStepId, id));
-          if (taskRows.length > 0) {
-            const tIds = taskRows.map(tr => tr.id);
-            await db.update(subtasks).set({ isCompleted: false, progress: 0 }).where(inArray(subtasks.taskId, tIds));
+            // 2. Reopen all tasks under this key step
+            await tx.update(projectTasks).set({ status: 'pending', progress: 0 }).where(eq(projectTasks.keyStepId, id));
+
+            // 3. Reopen all subtasks for those tasks
+            const taskRows = await tx.select({ id: projectTasks.id }).from(projectTasks).where(eq(projectTasks.keyStepId, id));
+            if (taskRows.length > 0) {
+              const tIds = taskRows.map(tr => tr.id);
+              await tx.update(subtasks).set({ isCompleted: false, progress: 0 }).where(inArray(subtasks.taskId, tIds));
+            }
           }
         }
+        return updatedStep;
+      });
 
+      if (updated) {
         await updateParentProgress('keystep', id, req.user?.id);
       }
 

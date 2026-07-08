@@ -118,7 +118,7 @@ interface WorkspaceResponse {
 }
 
 const TASK_STATUSES = ["pending", "in-progress", "Completed", "On Hold", "Cancelled"];
-const KEYSTEP_STATUSES = ["pending", "in-progress", "completed"];
+const KEYSTEP_STATUSES = ["pending", "in-progress", "completed", "cancelled"];
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 
 export default function Workspace() {
@@ -320,6 +320,7 @@ export default function Workspace() {
             <SelectItem value="In Progress">In Progress</SelectItem>
             <SelectItem value="On Hold">On Hold</SelectItem>
             <SelectItem value="Completed">Completed</SelectItem>
+            <SelectItem value="Cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
@@ -397,6 +398,7 @@ export default function Workspace() {
                         <SelectItem value="In Progress">In Progress</SelectItem>
                         <SelectItem value="On Hold">On Hold</SelectItem>
                         <SelectItem value="Completed">Completed</SelectItem>
+                        <SelectItem value="Cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

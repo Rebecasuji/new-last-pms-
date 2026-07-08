@@ -984,6 +984,9 @@ export default function Projects() {
     if (s === 'Completed' || s === 'closed') {
       return <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] uppercase border-none px-2 py-0.5">Completed</Badge>;
     }
+    if (s === 'Cancelled' || s === 'cancelled') {
+      return <Badge className="bg-red-500 hover:bg-red-600 text-white text-[10px] uppercase border-none px-2 py-0.5">Cancelled</Badge>;
+    }
     return (
       <Badge variant="secondary" className="text-[10px] uppercase">
         {status || "Planned"}
@@ -1185,6 +1188,7 @@ export default function Projects() {
                         <SelectItem value="In Progress">In Progress</SelectItem>
                         <SelectItem value="On Hold">On Hold</SelectItem>
                         <SelectItem value="Completed">Completed</SelectItem>
+                        <SelectItem value="Cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1803,7 +1807,7 @@ export default function Projects() {
                               <Command>
                                 <CommandList>
                                   <CommandGroup>
-                                    {["Not Started", "Planned", "In Progress", "On Hold", "Completed"].map((s) => (
+                                    {["Not Started", "Planned", "In Progress", "On Hold", "Completed", "Cancelled"].map((s) => (
                                       <CommandItem
                                         key={s}
                                         onSelect={() => {
