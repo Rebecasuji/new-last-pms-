@@ -1629,18 +1629,6 @@ export async function registerRoutes(
 
           const baseMatch = Boolean(isTeamMember || isCreator || isDeptMatch || hasAssignedTask);
 
-          // SPECIAL RESTRICTION for E0046, E0048: Only show software developer projects
-          const currentEmpCode = req.employee?.empCode;
-          if (currentEmpCode === "E0046" || currentEmpCode === "E0048") {
-            const normalizedSoftwareDept = normalizeDept("software developer");
-            const normalizedProjectDepts = projectDepts.map((d: string) => normalizeDept(d));
-            const isSoftwareProject = normalizedProjectDepts.includes(normalizedSoftwareDept);
-
-            debug(`[ACL] Project "${p.title}" for ${currentEmpCode}: isSoftware=${isSoftwareProject}, baseMatch=${baseMatch} (isTeam=${isTeamMember}, isCreator=${isCreator}, isDeptMatch=${isDeptMatch}, hasTask=${hasAssignedTask})`);
-
-            return isSoftwareProject;
-          }
-
           if (baseMatch) {
             // debug(`[ACL] Project "${p.title}" visible for ${req.employee?.name} (isDeptMatch=${isDeptMatch})`);
           }
@@ -4787,7 +4775,6 @@ export async function registerRoutes(
 
         const reqDeptNorm = normalizeDept(requestingEmployeeDepartment);
         const currentEmpCode = req.employee?.empCode;
-        const needsSoftwareDeptFilter = currentEmpCode === "E0046" || currentEmpCode === "E0048";
 
         // Run all independent lookups in parallel instead of one-by-one — this was
         // the main cause of the Tasks page loading slowly for non-admin users.
@@ -4796,7 +4783,6 @@ export async function registerRoutes(
           teamProjectIdsRaw,
           taskMemberIdsRaw,
           subtaskAssignedTaskIdsRaw,
-          allSoftProjsRaw,
         ] = await Promise.all([
           db.select({ projectId: projectDepartments.projectId })
             .from(projectDepartments)
@@ -4811,26 +4797,13 @@ export async function registerRoutes(
             .from(subtasks)
             .leftJoin(subtaskMembers, eq(subtasks.id, subtaskMembers.subtaskId))
             .where(or(eq(subtasks.assignedTo, requestingEmployeeId), eq(subtaskMembers.employeeId, requestingEmployeeId))),
-          needsSoftwareDeptFilter
-            ? db.select({ id: projectDepartments.projectId })
-              .from(projectDepartments)
-              .where(eq(projectDepartments.department, normalizeDept("software developer")))
-            : Promise.resolve([] as { id: string }[]),
         ]);
 
         const deptProjectIds = deptProjectIdsRaw.map((r) => r.projectId);
         const teamProjectIds = teamProjectIdsRaw.map((r) => r.projectId);
 
         // Accessible projects = team member OR department match
-        const initialAccessibleProjectIds = Array.from(new Set([...deptProjectIds, ...teamProjectIds]));
-
-        // SPECIAL RESTRICTION for E0046, E0048: Only allow software developer projects
-        let accessibleProjectIds = initialAccessibleProjectIds;
-
-        if (needsSoftwareDeptFilter) {
-          const allSoftProjs = allSoftProjsRaw.map((r: any) => r.id);
-          accessibleProjectIds = initialAccessibleProjectIds.filter(id => allSoftProjs.includes(id));
-        }
+        const accessibleProjectIds = Array.from(new Set([...deptProjectIds, ...teamProjectIds]));
 
         const taskMemberIds = taskMemberIdsRaw.map((r) => r.taskId);
         const subtaskAssignedTaskIds = subtaskAssignedTaskIdsRaw.map(r => r.taskId);
@@ -4847,24 +4820,6 @@ export async function registerRoutes(
 
         if (assignedTaskIds.length > 0) {
           conditions.push(inArray(projectTasks.id, assignedTaskIds));
-        }
-
-        // For E0046/E0048, we must ONLY show tasks from software developer projects
-        if (currentEmpCode === "E0046" || currentEmpCode === "E0048") {
-          const normalizedSoftwareDept = normalizeDept("software developer");
-          const allSoftProjsRaw = await db.select({ id: projectDepartments.projectId })
-            .from(projectDepartments)
-            .where(eq(projectDepartments.department, normalizedSoftwareDept));
-          const allSoftProjs = allSoftProjsRaw.map(r => r.id);
-
-          if (allSoftProjs.length > 0) {
-            // Wrap existing conditions in an AND with project filter
-            const projectCond = inArray(projectTasks.projectId, allSoftProjs);
-            conditions = [and(or(...conditions), projectCond)];
-          } else {
-            // No software projects exist? They see nothing.
-            conditions = [sql`false` as any];
-          }
         }
 
         let finalConditions;
